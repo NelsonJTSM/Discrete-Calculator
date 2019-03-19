@@ -16,10 +16,11 @@
 
 #define ERROR_CHAR '?'
 #define NUM_OPERATORS 5
+#define LETTERS_LEN 26
 
+int power(int a, int b);
 char *create_string(int len);
-int is_operand(char c);
-int is_operator(char c);
+result *create_result(int var_cnt, char *expression, int exp_len, int *letters);
 
 char operators[] = {'~', '&', '^', '<', '>'};
 int precedence[] = {2, 3, 3, 4, 4};
@@ -33,6 +34,57 @@ char *create_string(int len)
 
 	new_string[len] = '\0';
 	return new_string;
+}
+
+result *create_result(int var_cnt, char *expression, int exp_len, int *letters)
+{
+	int i, ctrl = 0;
+	result *final_result = malloc(sizeof(result));
+
+	if (final_result == NULL)
+		return NULL;
+
+	// Initialize final_result.
+	final_result->row_size = power(2, var_cnt);
+	final_result->col_size = var_cnt + 1;
+
+	// Fill header.
+	final_result->header = malloc(sizeof(char *) * final_result->col_size);
+
+	for (i = 0; i < LETTERS_LEN; i++)
+	{	
+		if (letters[i] > 0)
+		{
+			final_result->header[ctrl] = create_string(1);
+			final_result->header[ctrl][0] = (char)('a' + i);
+			ctrl++;
+		}
+	}
+
+	final_result->header[ctrl] = create_string(exp_len);
+	strcpy(final_result->header[ctrl], expression);
+
+	// Do grid stuff
+	final_result->grid = malloc(sizeof(char *) * final_result->row_size);
+	for (i = 0; i < final_result->row_size; i++)
+		final_result->grid[i] = malloc(sizeof(char) * final_result->col_size);
+
+	return final_result;
+}
+
+void destroy_result(result *rt)
+{
+	int i, j;
+
+	for (i = 0; i < rt->col_size; i++)
+		free(rt->header[i]);
+
+	for (i = 0; i < rt->row_size; i++)
+		free(rt->grid[i]);
+
+	free(rt->header);
+	free(rt->grid);
+	free(rt);
 }
 
 int is_operand(char c)
@@ -253,10 +305,9 @@ char evaluate_infix_exp(char *infix_exp)
 
 	len = strlen(infix_exp);
 
-	postfix_exp = create_string(len);
-	strcpy(postfix_exp, infix_to_postfix(infix_exp));
-
+	postfix_exp = infix_to_postfix(infix_exp);
 	result = evaluate_postfix_exp(postfix_exp);
+
 	free(postfix_exp);
 	postfix_exp = NULL;
 
@@ -294,22 +345,27 @@ void print_result(result *rt)
 	}
 }
 
+// TODO: Change malloc calls to calloc calls.
 result *get_result(char *expressions)
 {
-	int i, j, k, pos_comb, count, len, ctrl = 0, letters_len = 26, var_cnt = 0, combinations;
-	char letters[letters_len], bit, *new_exp, *fixed_exp;
-	result *final_result = malloc(sizeof(result));
+	int i, j, k, pos_comb, count, exp_len, var_cnt;
+	int *letters;
+	char bit, *new_exp, *fixed_exp;
+	result *final_result;
 
 	if (expressions == NULL)
 		return NULL;
 
-	len = strlen(expressions);
+	exp_len = strlen(expressions);
 
-	for (i = 0; i < letters_len; i++)
-		letters[i] = 0;
+	// Creates a int[LETTER_LEN] of the amount of times
+	// a specific letters appears in the original expression.
+	// Ex: (a^b)>b^e
+	// letters = {1, 2, 0, 0, 1, 0, ...}
+	letters = (int*)calloc(LETTERS_LEN, sizeof(int));
+	var_cnt = 0;
 
-	// Check all variables.
-	for (i = 0; i < len; i++)
+	for (i = 0; i < exp_len; i++)
 	{
 		if (expressions[i] >= 'a' && expressions[i] <= 'z')
 		{
@@ -320,35 +376,20 @@ result *get_result(char *expressions)
 		}
 	}
 
-	combinations = power(2, var_cnt);
+	final_result = create_result(var_cnt, expressions, exp_len, letters);
 
-	// Initialize final_result.
-	final_result->row_size = combinations;
-	final_result->col_size = var_cnt + 1;
-	final_result->header = malloc(sizeof(char *) * final_result->col_size);
-	final_result->grid = malloc(sizeof(char *) * final_result->row_size);
-	for (i = 0; i < final_result->row_size; i++)
-	{
-		final_result->grid[i] = malloc(sizeof(char));
-	}
+	free(letters);
 
-	// Fill header.
-	for (i = 0; i < letters_len; i++)
-	{	
-		if (letters[i] > 0)
-		{
-			final_result->header[ctrl] = malloc(sizeof(char) * 2);
-			final_result->header[ctrl][0] = (char)('a' + i);
-			final_result->header[ctrl][1] = '\0';
-			ctrl++;
-		}
-	}
-
-	final_result->header[ctrl] = malloc(sizeof(char) * (len + 1));
-	strcpy(final_result->header[ctrl], expressions);
-
-	// Fill up col_size - 1 of the grid.
-	pos_comb = combinations;
+	// Fill up final_result->grid with all possible
+	// combinations (pos_comb) of 1s and 0s
+	// for each variable. 
+	// Ex: p^q
+	// p q p^q
+	// 1 1		<- 
+	// 1 0		<- Fills these up.
+	// 0 1		<-
+	// 0 0		<-
+	pos_comb = power(2, var_cnt);
 
 	for (i = 0; i < var_cnt; i++)
 	{
@@ -370,11 +411,16 @@ result *get_result(char *expressions)
 		}
 	}
 
-	new_exp = create_string(len);
+	// Goes through all possible combinations
+	// of the variables, makes an new expression (new_exp)
+	// of them, solves the new expression,
+	// and puts the result into the final column
+	// in final_result.
+	new_exp = create_string(exp_len);
 
 	for (i = 0; i < final_result->row_size; i++)
 	{
-		for (k = 0; k < len; k++)
+		for (k = 0; k < exp_len; k++)
 		{
 			new_exp[k] = expressions[k];
 		}
@@ -382,7 +428,7 @@ result *get_result(char *expressions)
 		// Fix new_exp
 		for (j = 0; j < final_result->col_size-1; j++)
 		{
-			for (k = 0; k < len; k++)
+			for (k = 0; k < exp_len; k++)
 			{
 				if (expressions[k] == final_result->header[j][0])
 					new_exp[k] = final_result->grid[i][j];
@@ -390,11 +436,20 @@ result *get_result(char *expressions)
 		}
 
 		fixed_exp = fix_exp(new_exp);
-		final_result->grid[i][final_result->col_size-1] = evaluate_infix_exp(fixed_exp);
+		final_result->grid[i][final_result->col_size - 1] = evaluate_infix_exp(fixed_exp);
 		free(fixed_exp);
 	}
 
 	free(new_exp);
 
 	return final_result;
+}
+
+int main(void)
+{
+	result *rt = get_result("p^q");
+	print_result(rt);
+	destroy_result(rt);
+
+	return 0;
 }
