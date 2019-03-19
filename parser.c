@@ -1,10 +1,7 @@
-//
 //  Parser.c
 //  Discrete Math
 //
-//  Written by Nelson Torres and Arjun Pherwani on 3/2/19.
-//  Copyright © 2019 Joseph Kocis. All rights reserved.
-//
+//  Written by Nelson Torres.
 
 // TODO: Make sure the expression is valid (check parenthesis/all symbols/etc)
 
